@@ -52,7 +52,6 @@ st.markdown("""
 
 # --- 3. POŁĄCZENIE Z BAZĄ ---
 try:
-    # Obsługa sekretów (lokalnie i w chmurze)
     url = st.secrets["supabase"]["url"]
     key = st.secrets["supabase"]["key"]
     supabase = create_client(url, key)
@@ -72,18 +71,15 @@ def pobierz_kategorie():
 def pobierz_magazyn():
     """Pobiera produkty i łączy je z nazwą kategorii"""
     try:
-        # Pobieramy wszystko z produktów + nazwę z połączonej tabeli kategoria
         response = supabase.table('produkty').select("*, kategoria(nazwa)").execute()
         dane = response.data
         
         if not dane:
             return pd.DataFrame()
 
-        # Wyciąganie nazwy kategorii z zagnieżdżonego obiektu
         clean_data = []
         for row in dane:
             kat_info = row.get('kategoria')
-            # Zabezpieczenie na wypadek usuniętej kategorii
             row['kategoria_nazwa'] = kat_info['nazwa'] if kat_info else "Brak"
             clean_data.append(row)
             
@@ -102,18 +98,37 @@ def main():
 
     st.divider()
 
-    # --- PANEL BOCZNY (DODAWANIE) ---
+    # --- PANEL BOCZNY ---
     with st.sidebar:
+        
+        # === 1. SEKCJA DODAWANIA KATEGORII (NOWOŚĆ) ===
+        with st.expander("📂 Dodaj nową kategorię", expanded=True):
+            with st.form("cat_form", clear_on_submit=True):
+                nowa_kat = st.text_input("Nazwa (np. Elektronika)")
+                sub_cat = st.form_submit_button("Dodaj kategorię")
+                
+                if sub_cat and nowa_kat:
+                    try:
+                        supabase.table('kategoria').insert({"nazwa": nowa_kat}).execute()
+                        st.success(f"Dodano: {nowa_kat}")
+                        time.sleep(1) # Chwila na odczytanie komunikatu
+                        st.rerun() # Odświeżenie strony, żeby kategoria pojawiła się niżej
+                    except Exception as e:
+                        st.error(f"Błąd: {e}")
+        
+        st.divider()
+
+        # === 2. SEKCJA DODAWANIA PRODUKTU ===
         st.header("➕ Nowy towar")
         
         # Pobieranie kategorii z bazy
         lista_kat = pobierz_kategorie()
         
+        # Jeśli lista jest pusta, zmienna mapa_kat jest pusta
         if not lista_kat:
-            st.warning("⚠️ Brak kategorii w bazie! Dodaj je najpierw w Supabase.")
+            st.warning("☝️ Lista pusta! Dodaj najpierw kategorię powyżej.")
             mapa_kat = {}
         else:
-            # Tworzymy mapę {Nazwa Kategorii: ID Kategorii}
             mapa_kat = {k['nazwa']: k['id'] for k in lista_kat}
 
         with st.form("add_form", clear_on_submit=True):
@@ -129,26 +144,25 @@ def main():
             with c1: ilosc = st.number_input("Ilość", min_value=1, value=10)
             with c2: cena = st.number_input("Cena (PLN)", min_value=0.00, step=0.01)
 
-            submitted = st.form_submit_button("Zapisz", type="primary")
+            submitted = st.form_submit_button("Zapisz produkt", type="primary")
             
             if submitted:
                 if nazwa and wybrana_kat:
                     try:
-                        # Przygotowanie danych do wysyłki
                         nowy_towar = {
                             "nazwa": nazwa,
                             "liczba": ilosc,
                             "cena": cena,
-                            "kategoria_id": mapa_kat[wybrana_kat] # Kluczowe dla relacji!
+                            "kategoria_id": mapa_kat[wybrana_kat]
                         }
                         supabase.table('produkty').insert(nowy_towar).execute()
-                        st.success("✅ Dodano!")
+                        st.success("✅ Dodano produkt!")
                         time.sleep(0.5)
                         st.rerun()
                     except Exception as e:
                         st.error(f"Błąd zapisu: {e}")
                 else:
-                    st.warning("Uzupełnij nazwę i kategorię.")
+                    st.warning("Uzupełnij nazwę i upewnij się, że wybrałeś kategorię.")
 
     # --- TABELA GŁÓWNA ---
     df = pobierz_magazyn()
@@ -194,7 +208,7 @@ def main():
                     time.sleep(0.5)
                     st.rerun()
     else:
-        st.info("Magazyn pusty. Dodaj towar w pasku po lewej.")
+        st.info("Magazyn pusty. Dodaj najpierw kategorię, a potem produkt w pasku po lewej.")
 
 if __name__ == "__main__":
     main()
