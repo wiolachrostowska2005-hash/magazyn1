@@ -6,35 +6,41 @@ import time
 # --- 1. KONFIGURACJA STRONY ---
 st.set_page_config(page_title="Magazyn Lite", page_icon="🔹", layout="wide")
 
-# --- 2. NOWY WYGLĄD (MORSKI / TEAL) ---
+# --- 2. NOWY WYGLĄD (NOWOCZESNY KONTRAST) ---
 st.markdown("""
     <style>
-    /* Tło całej aplikacji - Czysta biel */
+    /* 1. TŁO APLIKACJI - Już nie białe, a jasnoszare/błękitne */
     .stApp {
-        background-color: #ffffff;
+        background-color: #ebf1f5;
     }
 
-    /* Pasek boczny - Ciemny turkus (Teal) */
+    /* 2. PASEK BOCZNY - Ciemny turkus */
     [data-testid="stSidebar"] {
         background-color: #004d40 !important;
+        border-right: 1px solid #00332a;
     }
 
-    /* Karta główna - Delikatny szary z ramką */
+    /* 3. KARTA GŁÓWNA - Biała, żeby odcinała się od tła */
     .main .block-container {
-        background-color: #f8f9fa;
-        padding: 2rem;
-        border-radius: 12px;
-        border: 1px solid #e9ecef;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        background-color: #ffffff;
+        padding: 2rem 3rem;
+        border-radius: 15px;
+        border: 1px solid #dce4e8;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.05); /* Lekki cień */
+        margin-top: 1rem;
     }
 
     /* --- KOLORY TEKSTÓW --- */
     h1, h2, h3 {
-        color: #00695c !important; /* Ciemny morski dla nagłówków */
+        color: #004d40 !important; /* Nagłówki w kolorze sidebaru */
+    }
+    
+    p, div, span, label {
+        color: #2c3e50; /* Ciemnoszary tekst */
     }
     
     /* Teksty w Sidebarze - Białe */
-    [data-testid="stSidebar"] h1, [data-testid="stSidebar"] p, [data-testid="stSidebar"] label {
+    [data-testid="stSidebar"] h1, [data-testid="stSidebar"] p, [data-testid="stSidebar"] label, [data-testid="stSidebar"] span {
         color: #e0f2f1 !important;
     }
 
@@ -42,19 +48,25 @@ st.markdown("""
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
 
-    /* Inputy - Białe z turkusowym obramowaniem przy aktywności */
+    /* Inputy - Białe z wyraźną ramką */
     .stTextInput input, .stNumberInput input {
         color: #333333 !important;
-        background-color: #ffffff !important;
-        border: 1px solid #b2dfdb;
+        background-color: #f8f9fa !important;
+        border: 1px solid #ced4da;
     }
 
     /* --- METRYKI --- */
-    /* Liczby w kolorze morskim */
+    /* Liczby w kolorze turkusowym */
     [data-testid="stMetricValue"] {
         font-size: 2.5rem;
         font-weight: 700;
-        color: #00796b !important; 
+        color: #00897b !important; 
+    }
+    
+    /* Etykiety metryk - Szare */
+    [data-testid="stMetricLabel"] {
+        color: #546e7a !important;
+        font-weight: 600;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -82,7 +94,7 @@ def main():
         st.write("# 🔹")
     with col2:
         st.title("System Magazynowy")
-        st.caption("Wersja Lite (Bez historii operacji)")
+        st.caption("Wersja Lite (Tylko stan bieżący)")
 
     st.divider()
 
@@ -178,3 +190,6 @@ def main():
         st.error("Problem z połączeniem.")
         with st.expander("Szczegóły"):
             st.write(e)
+
+if _name_ == "_main_":
+    main()
