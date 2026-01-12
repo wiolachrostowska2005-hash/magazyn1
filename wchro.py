@@ -1,110 +1,192 @@
 import streamlit as st
-from supabase import create_client, Client
 import pandas as pd
+from supabase import create_client
+import time
 
-# --- KONFIGURACJA SUPABASE ---
-# Pobieramy dane z sekretów (st.secrets)
+# --- 1. KONFIGURACJA STRONY ---
+st.set_page_config(page_title="Prosty Magazyn", page_icon="🏢", layout="wide")
+
+# --- 2. NOWY WYGLĄD (MOTYW GRANATOWY) ---
+st.markdown("""
+    <style>
+    /* Tło całej aplikacji - Bardzo jasny szary, czysty */
+    .stApp {
+        background-color: #f4f6f9;
+    }
+
+    /* Pasek boczny - Profesjonalny Granat (Midnight Blue) */
+    [data-testid="stSidebar"] {
+        background-color: #2c3e50 !important;
+    }
+
+    /* Karta główna - Biała z cieniem */
+    .main .block-container {
+        background-color: #ffffff;
+        padding: 2rem;
+        border-radius: 10px;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        margin-top: 1rem;
+    }
+
+    /* --- TEKSTY --- */
+    /* Główne nagłówki - Ciemny granat */
+    h1, h2, h3 {
+        color: #2c3e50 !important;
+    }
+    
+    /* Tekst w Sidebarze - Biały/Szary */
+    [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3, 
+    [data-testid="stSidebar"] p, [data-testid="stSidebar"] label {
+        color: #ecf0f1 !important;
+    }
+
+    /* Ukrycie stopki i menu */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+
+    /* Inputy - Klasyczne białe */
+    .stTextInput input, .stNumberInput input {
+        color: #2c3e50 !important;
+        background-color: #ffffff !important;
+        border: 1px solid #bdc3c7;
+    }
+
+    /* --- METRYKI (LICZNIKI) --- */
+    /* Kolor akcentowy - Pomarańczowy (Carrot Orange) */
+    [data-testid="stMetricValue"] {
+        font-size: 2.5rem;
+        font-weight: 700;
+        color: #e67e22 !important; 
+    }
+    
+    [data-testid="stMetricLabel"] {
+        color: #7f8c8d !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+# --- 3. POŁĄCZENIE Z BAZĄ ---
 try:
-    SUPABASE_URL = st.secrets["supabase"]["url"]
-    SUPABASE_KEY = st.secrets["supabase"]["key"]
-except FileNotFoundError:
-    st.error("Brak pliku secrets.toml lub konfiguracji w Streamlit Cloud!")
+    url = st.secrets["supabase"]["url"]
+    key = st.secrets["supabase"]["key"]
+    supabase = create_client(url, key)
+except Exception as e:
+    st.error("⚠️ Błąd połączenia! Brakuje pliku .streamlit/secrets.toml")
     st.stop()
 
-# Tworzenie klienta połączenia
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+# --- 4. FUNKCJE (TYLKO MAGAZYN, BEZ HISTORII) ---
+def pobierz_magazyn():
+    """Pobiera dane tylko z tabeli produkty"""
+    response = supabase.table('produkty').select("*").execute()
+    return pd.DataFrame(response.data)
 
-# --- INTERFEJS STREAMLIT ---
-st.title("☁️ System Magazynowy (Supabase Cloud)")
+# --- 5. GŁÓWNA APLIKACJA ---
+def main():
+    # --- NAGŁÓWEK ---
+    col1, col2 = st.columns([1, 15])
+    with col1:
+        st.write("# 🏢")
+    with col2:
+        st.title("System Magazynowy Lite")
+        st.caption("Prosta ewidencja towarów (Supabase)")
 
-tab1, tab2, tab3 = st.tabs(["Dodaj Kategorię", "Dodaj Produkt", "Podgląd Bazy"])
+    st.divider()
 
-# --- ZAKŁADKA 1: DODAWANIE KATEGORII ---
-with tab1:
-    st.header("Nowa Kategoria")
-    with st.form("form_kategoria"):
-        kat_nazwa = st.text_input("Nazwa kategorii")
-        kat_opis = st.text_area("Opis kategorii")
-        submitted_kat = st.form_submit_button("Dodaj kategorię")
+    # --- SIDEBAR (DODAWANIE) ---
+    with st.sidebar:
+        st.header("➕ Dodaj towar")
+        st.write("Wprowadź dane do systemu:")
         
-        if submitted_kat and kat_nazwa:
-            try:
-                # Wstawianie danych do Supabase
-                data = {"nazwa": kat_nazwa, "opis": kat_opis}
-                supabase.table("kategoria").insert(data).execute()
-                st.success(f"Dodano kategorię: {kat_nazwa}")
-            except Exception as e:
-                st.error(f"Błąd zapisu: {e}")
+        with st.form("add_form", clear_on_submit=True):
+            # Inputy wyglądają klasycznie
+            nazwa = st.text_input("Nazwa produktu")
+            col_sb1, col_sb2 = st.columns(2)
+            with col_sb1:
+                ilosc = st.number_input("Ilość", min_value=1, value=10)
+            with col_sb2:
+                # Strzałki do groszy (step=0.01)
+                cena = st.number_input("Cena (PLN)", min_value=0.00, value=0.00, step=0.01)
 
-# --- ZAKŁADKA 2: DODAWANIE PRODUKTU ---
-with tab2:
-    st.header("Nowy Produkt")
-    
-    # 1. Pobieramy listę kategorii z Supabase
-    response = supabase.table("kategoria").select("id, nazwa").execute()
-    kategorie_data = response.data
-    
-    if not kategorie_data:
-        st.warning("Najpierw dodaj kategorię w pierwszej zakładce!")
-    else:
-        # Tworzymy słownik {Nazwa: ID}
-        opcje_kategorii = {item['nazwa']: item['id'] for item in kategorie_data}
-        
-        with st.form("form_produkt"):
-            prod_nazwa = st.text_input("Nazwa produktu")
-            prod_liczba = st.number_input("Ilość", min_value=1, step=1)
-            prod_cena = st.number_input("Cena (PLN)", min_value=0.01, step=0.01, format="%.2f")
-            wybrana_kat_nazwa = st.selectbox("Wybierz kategorię", options=list(opcje_kategorii.keys()))
+            # Przycisk
+            submitted = st.form_submit_button("Zapisz w bazie", type="primary")
             
-            submitted_prod = st.form_submit_button("Dodaj produkt")
-            
-            if submitted_prod and prod_nazwa:
-                wybrane_id = opcje_kategorii[wybrana_kat_nazwa]
-                
-                # Przygotowanie danych (zwróć uwagę na nazwy kolumn z Twojego zdjęcia!)
-                # Użyłem 'Kategoria_id' zgodnie z Twoim zdjęciem, ale upewnij się co do wielkości liter w Supabase
-                nowy_produkt = {
-                    "nazwa": prod_nazwa,
-                    "liczba": prod_liczba,
-                    "cena": prod_cena,
-                    "Kategoria_id": wybrane_id 
-                }
-                
-                try:
-                    supabase.table("produkty").insert(nowy_produkt).execute()
-                    st.success(f"Dodano produkt: {prod_nazwa}")
-                except Exception as e:
-                    st.error(f"Błąd zapisu: {e}")
+            if submitted:
+                if nazwa:
+                    # Prosty słownik, bez logów
+                    dane = {"nazwa": nazwa, "liczba": ilosc, "cena": cena}
+                    try:
+                        supabase.table('produkty').insert(dane).execute()
+                        st.success("✅ Gotowe!")
+                        time.sleep(0.5)
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Błąd: {e}")
+                else:
+                    st.warning("⚠️ Podaj nazwę!")
 
-# --- ZAKŁADKA 3: PODGLĄD DANYCH ---
-with tab3:
-    st.header("Stan Magazynu")
-    
-    # Pobieranie danych z łączeniem tabel (Joins w Supabase są super proste!)
-    # Składnia: '*, kategoria(nazwa)' oznacza: pobierz wszystko z produktów i nazwę z połączonej tabeli kategoria
+        st.markdown("---")
+        st.info("Wersja uproszczona (Bez Historii)")
+
+    # --- DASHBOARD ---
     try:
-        response = supabase.table("produkty").select("*, kategoria(nazwa)").execute()
-        dane = response.data
+        df = pobierz_magazyn()
         
-        if dane:
-            # Dane przychodzą jako lista słowników, trzeba je "spłaszczyć" dla Pandas
-            # Bo kategoria przyjdzie jako {'nazwa': 'Elektronika'} wewnątrz produktu
-            clean_data = []
-            for row in dane:
-                item = {
-                    "ID": row['id'],
-                    "Produkt": row['nazwa'],
-                    "Ilość": row['liczba'],
-                    "Cena": f"{row['cena']:.2f} zł",
-                    # Obsługa sytuacji, gdyby kategoria została usunięta
-                    "Kategoria": row['kategoria']['nazwa'] if row['kategoria'] else "Brak"
-                }
-                clean_data.append(item)
-
-            df = pd.DataFrame(clean_data)
-            st.dataframe(df, use_container_width=True)
-        else:
-            st.info("Baza jest pusta.")
+        if not df.empty:
+            # Standaryzacja nazw kolumn na małe litery
+            df.columns = [c.lower() for c in df.columns]
             
+            # Proste KPI
+            total_items = df['liczba'].sum()
+            total_val = (df['liczba'] * df['cena']).sum() if 'cena' in df.columns else 0
+
+            # Wyświetlanie liczników
+            m1, m2 = st.columns(2)
+            m1.metric("📦 Stan Magazynowy", f"{total_items}", "sztuk")
+            m2.metric("💰 Wartość Towarów", f"{total_val:,.2f} PLN".replace(",", " "), "szacunkowa")
+            
+            st.markdown("### 📋 Lista produktów")
+            
+            # Tabela
+            st.dataframe(
+                df[['id', 'nazwa', 'liczba', 'cena']],
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "id": st.column_config.TextColumn("ID", width="small"),
+                    "nazwa": st.column_config.TextColumn("Produkt", width="large"),
+                    "liczba": st.column_config.ProgressColumn(
+                        "Ilość", 
+                        format="%d", 
+                        max_value=max(df['liczba']) * 1.1,
+                        min_value=0
+                    ),
+                    "cena": st.column_config.NumberColumn("Cena", format="%.2f zł")
+                }
+            )
+
+            # Sekcja Usuwania (bez zakładek, po prostu pod spodem)
+            st.divider()
+            with st.expander("🗑️ Usuń towar"):
+                if 'id' in df.columns:
+                    c1, c2 = st.columns([3, 1])
+                    with c1:
+                        # Lista do wyboru
+                        opcje = df.apply(lambda x: f"ID {x['id']}: {x['nazwa']}", axis=1)
+                        wybrany = st.selectbox("Wybierz produkt", opcje, label_visibility="collapsed")
+                    with c2:
+                        if st.button("Usuń trwale"):
+                            id_del = int(wybrany.split("ID ")[1].split(":")[0])
+                            # Tylko usuwamy, nie zapisujemy historii
+                            supabase.table('produkty').delete().eq('id', id_del).execute()
+                            st.rerun()
+
+        else:
+            st.info("Baza jest pusta. Dodaj pierwszy produkt w menu po lewej.")
+
     except Exception as e:
-        st.error(f"Błąd pobierania danych: {e}")
+        st.error("Problem z połączeniem.")
+        with st.expander("Szczegóły"):
+            st.write(e)
+
+if _name_ == "_main_":
+    main()
