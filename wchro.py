@@ -1,52 +1,80 @@
 import streamlit as st
 import pandas as pd
 from supabase import create_client
+from datetime import datetime
 import time
 
 # --- 1. KONFIGURACJA STRONY ---
-st.set_page_config(page_title="Magazyn Lite", page_icon="🔹", layout="wide")
+st.set_page_config(page_title="Magazyn", page_icon="📦", layout="wide")
 
-# --- 2. NOWY WYGLĄD (CSS) ---
+# --- 2. CSS - DARK MODE (Pełny ciemny motyw) ---
 st.markdown("""
     <style>
-    /* TŁO APLIKACJI */
-    .stApp { background-color: #ebf1f5; }
-    
-    /* PASEK BOCZNY */
-    [data-testid="stSidebar"] {
-        background-color: #004d40 !important;
-        border-right: 1px solid #00332a;
+    /* 1. Tło całej aplikacji (Główne tło) - Ciemny grafit */
+    .stApp {
+        background-color: #0e1117;
     }
-    
-    /* GŁÓWNA KARTA */
+
+    /* 2. Tło Paska Bocznego (Sidebar) - Idealna Czerń */
+    [data-testid="stSidebar"] {
+        background-color: #000000 !important;
+        border-right: 1px solid #333;
+    }
+
+    /* 3. Karta główna (Kontener z danymi) - Ciemnoszary (dla kontrastu) */
     .main .block-container {
-        background-color: #ffffff;
+        background-color: #1f2937; /* Ciemnoszary, ale jaśniejszy od tła */
         padding: 2rem 3rem;
         border-radius: 15px;
-        border: 1px solid #dce4e8;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5);
         margin-top: 1rem;
     }
 
-    /* KOLORY TEKSTÓW */
-    h1, h2, h3 { color: #004d40 !important; }
-    p, div, span, label { color: #2c3e50; }
-    
-    /* Pasek boczny - tekst biały */
-    [data-testid="stSidebar"] h1, [data-testid="stSidebar"] p, 
-    [data-testid="stSidebar"] label, [data-testid="stSidebar"] span, 
-    [data-testid="stSidebar"] div { color: #e0f2f1 !important; }
-
-    /* Inputy */
-    .stTextInput input, .stNumberInput input, .stSelectbox div[data-baseweb="select"] > div {
-        color: #333333 !important;
-        background-color: #f8f9fa !important;
-        border: 1px solid #ced4da;
+    /* --- KOLORY TEKSTÓW --- */
+   
+    /* Wszystkie nagłówki i teksty na biało */
+    h1, h2, h3, h4, h5, h6, p, div, span, label, li, .stMarkdown {
+        color: #e5e7eb !important; /* Złamana biel, bardzo czytelna */
     }
 
-    /* Ukrycie stopki */
+    /* Wyjątek: Tekst wewnątrz przycisków i inputów (żeby był czytelny) */
+    button p {
+        color: inherit !important;
+    }
+
+    /* Ukrycie stopki i menu */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
+
+    /* --- STYLIZACJA ELEMENTÓW INTERFEJSU --- */
+
+    /* Inputy (pola wpisywania) - Ciemne tło, biały tekst */
+    .stTextInput input, .stNumberInput input {
+        color: #ffffff !important;
+        background-color: #374151 !important; /* Szare tło inputa */
+        border: 1px solid #4b5563;
+    }
+   
+    /* Etykiety inputów (małe napisy nad polami) */
+    .stTextInput label, .stNumberInput label {
+        color: #9ca3af !important; /* Szary tekst etykiet */
+    }
+
+    /* Metryki (Duże liczby) - Jasny błękit dla kontrastu */
+    [data-testid="stMetricValue"] {
+        font-size: 2.2rem;
+        font-weight: 700;
+        color: #60a5fa !important; /* Jasny niebieski */
+    }
+   
+    [data-testid="stMetricLabel"] {
+        color: #9ca3af !important;
+    }
+   
+    /* Tabela - dostosowanie do ciemnego tła */
+    [data-testid="stDataFrame"] {
+        background-color: #1f2937;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -56,159 +84,156 @@ try:
     key = st.secrets["supabase"]["key"]
     supabase = create_client(url, key)
 except Exception as e:
-    st.error("⚠️ Brak pliku secrets.toml lub konfiguracji w Streamlit Cloud!")
+    st.error("⚠️ Błąd połączenia! Sprawdź plik .streamlit/secrets.toml")
     st.stop()
 
 # --- 4. FUNKCJE ---
-def pobierz_kategorie():
-    """Pobiera listę kategorii do paska bocznego"""
-    try:
-        response = supabase.table('kategoria').select("id, nazwa").execute()
-        return response.data
-    except:
-        return []
-
 def pobierz_magazyn():
-    """Pobiera produkty i łączy je z nazwą kategorii"""
-    try:
-        response = supabase.table('produkty').select("*, kategoria(nazwa)").execute()
-        dane = response.data
-        
-        if not dane:
-            return pd.DataFrame()
+    response = supabase.table('produkty').select("*").execute()
+    return pd.DataFrame(response.data)
 
-        clean_data = []
-        for row in dane:
-            kat_info = row.get('kategoria')
-            row['kategoria_nazwa'] = kat_info['nazwa'] if kat_info else "Brak"
-            clean_data.append(row)
-            
-        return pd.DataFrame(clean_data)
-    except Exception as e:
-        st.error(f"Błąd pobierania danych: {e}")
-        return pd.DataFrame()
+def dodaj_log(produkt, akcja, ilosc):
+    teraz = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    dane = {"data": teraz, "produkt": produkt, "akcja": akcja, "ilosc": ilosc}
+    try:
+        supabase.table('historia').insert(dane).execute()
+    except:
+        pass
 
 # --- 5. GŁÓWNA APLIKACJA ---
 def main():
-    col1, col2 = st.columns([1, 15])
-    with col1: st.write("# 🔹")
-    with col2:
-        st.title("System Magazynowy")
-        st.caption("Panel Supabase (Cloud)")
+    # --- NAGŁÓWEK ---
+    col_logo, col_title = st.columns([1, 10])
+    with col_logo:
+        st.markdown("# 📦")
+    with col_title:
+        st.title("Magazyn")
+        st.caption("System zarządzania stanem magazynowym")
 
     st.divider()
 
-    # --- PANEL BOCZNY ---
+    # --- PANEL BOCZNY (SIDEBAR) ---
     with st.sidebar:
-        
-        # === 1. SEKCJA DODAWANIA KATEGORII (NOWOŚĆ) ===
-        with st.expander("📂 Dodaj nową kategorię", expanded=True):
-            with st.form("cat_form", clear_on_submit=True):
-                nowa_kat = st.text_input("Nazwa (np. Elektronika)")
-                sub_cat = st.form_submit_button("Dodaj kategorię")
-                
-                if sub_cat and nowa_kat:
-                    try:
-                        supabase.table('kategoria').insert({"nazwa": nowa_kat}).execute()
-                        st.success(f"Dodano: {nowa_kat}")
-                        time.sleep(1) # Chwila na odczytanie komunikatu
-                        st.rerun() # Odświeżenie strony, żeby kategoria pojawiła się niżej
-                    except Exception as e:
-                        st.error(f"Błąd: {e}")
-        
-        st.divider()
-
-        # === 2. SEKCJA DODAWANIA PRODUKTU ===
-        st.header("➕ Nowy towar")
-        
-        # Pobieranie kategorii z bazy
-        lista_kat = pobierz_kategorie()
-        
-        # Jeśli lista jest pusta, zmienna mapa_kat jest pusta
-        if not lista_kat:
-            st.warning("☝️ Lista pusta! Dodaj najpierw kategorię powyżej.")
-            mapa_kat = {}
-        else:
-            mapa_kat = {k['nazwa']: k['id'] for k in lista_kat}
-
-        with st.form("add_form", clear_on_submit=True):
-            nazwa = st.text_input("Nazwa produktu")
-            
-            # Selectbox z kategoriami
-            if mapa_kat:
-                wybrana_kat = st.selectbox("Kategoria", list(mapa_kat.keys()))
-            else:
-                wybrana_kat = None
-
+        st.header("🛠️ Panel Operacyjny")
+        st.write("Wypełnij formularz, aby przyjąć towar:")
+       
+        with st.form("dodawanie_form", clear_on_submit=True):
+            nazwa_input = st.text_input("Nazwa produktu", placeholder="np. Opony Zimowe")
+           
             c1, c2 = st.columns(2)
-            with c1: ilosc = st.number_input("Ilość", min_value=1, value=10)
-            with c2: cena = st.number_input("Cena (PLN)", min_value=0.00, step=0.01)
+            with c1:
+                liczba_input = st.number_input("Ilość szt.", min_value=1, value=10, step=1)
+            with c2:
+                # step=0.01 daje strzałki
+                cena_input = st.number_input("Cena jedn. (PLN)", min_value=0.00, value=0.00, step=0.01)
 
-            submitted = st.form_submit_button("Zapisz produkt", type="primary")
-            
+            submitted = st.form_submit_button("💾 Zatwierdź przyjęcie", type="primary")
+           
             if submitted:
-                if nazwa and wybrana_kat:
+                if nazwa_input:
+                    nowy_towar = {"nazwa": nazwa_input, "liczba": liczba_input, "cena": cena_input}
                     try:
-                        nowy_towar = {
-                            "nazwa": nazwa,
-                            "liczba": ilosc,
-                            "cena": cena,
-                            "kategoria_id": mapa_kat[wybrana_kat]
-                        }
-                        supabase.table('produkty').insert(nowy_towar).execute()
-                        st.success("✅ Dodano produkt!")
-                        time.sleep(0.5)
+                        with st.spinner("Przetwarzanie..."):
+                            supabase.table('produkty').insert(nowy_towar).execute()
+                            dodaj_log(nazwa_input, "PRZYJĘCIE", liczba_input)
+                            time.sleep(0.5)
+                        st.success("✅ Dodano!")
                         st.rerun()
                     except Exception as e:
-                        st.error(f"Błąd zapisu: {e}")
+                        st.error(f"Błąd: {e}")
                 else:
-                    st.warning("Uzupełnij nazwę i upewnij się, że wybrałeś kategorię.")
+                    st.warning("⚠️ Podaj nazwę produktu.")
 
-    # --- TABELA GŁÓWNA ---
-    df = pobierz_magazyn()
+        st.markdown("---")
+        st.info("Baza: Supabase (PostgreSQL)")
 
-    if not df.empty:
-        # Metryki
-        total_items = df['liczba'].sum()
-        total_val = (df['liczba'] * df['cena']).sum() if 'cena' in df.columns else 0
-        
-        m1, m2 = st.columns(2)
-        m1.metric("📦 Stan Magazynowy", f"{total_items}", "sztuk")
-        m2.metric("💰 Wartość", f"{total_val:,.2f} PLN".replace(",", " "), "PLN")
-        
-        st.write("")
-        st.subheader("📋 Lista asortymentu")
+    # --- DASHBOARD ---
+    try:
+        df = pobierz_magazyn()
+       
+        if not df.empty:
+            df.columns = [c.lower() for c in df.columns]
+           
+            total_items = df['id'].count()
+            total_stock = df['liczba'].sum()
+            total_value = (df['liczba'] * df['cena']).sum() if 'cena' in df.columns else 0
 
-        st.dataframe(
-            df,
-            use_container_width=True,
-            hide_index=True,
-            column_order=["id", "nazwa", "kategoria_nazwa", "liczba", "cena"],
-            column_config={
-                "id": st.column_config.TextColumn("ID", width="small"),
-                "nazwa": st.column_config.TextColumn("Produkt", width="medium"),
-                "kategoria_nazwa": st.column_config.TextColumn("Kategoria", width="medium"),
-                "liczba": st.column_config.ProgressColumn("Stan", format="%d", max_value=max(df['liczba'].max(), 100)),
-                "cena": st.column_config.NumberColumn("Cena", format="%.2f zł")
-            }
-        )
-        
-        # Usuwanie
-        st.divider()
-        with st.expander("🗑️ Usuń pozycję"):
-            c1, c2 = st.columns([3,1])
-            with c1:
-                opcje = df.apply(lambda x: f"ID {x['id']}: {x['nazwa']}", axis=1)
-                wybrany = st.selectbox("Wybierz", opcje, label_visibility="collapsed")
-            with c2:
-                if st.button("Usuń trwale"):
-                    id_del = int(wybrany.split("ID ")[1].split(":")[0])
-                    supabase.table('produkty').delete().eq('id', id_del).execute()
-                    st.success("Usunięto!")
-                    time.sleep(0.5)
-                    st.rerun()
-    else:
-        st.info("Magazyn pusty. Dodaj najpierw kategorię, a potem produkt w pasku po lewej.")
+            # Metryki
+            m1, m2, m3 = st.columns(3)
+            m1.metric("📦 Asortyment (SKU)", f"{total_items}", delta="Pozycji")
+            m2.metric("📊 Łączny stan", f"{total_stock:,}".replace(",", " "), delta="Sztuk łącznie")
+            m3.metric("💰 Wartość", f"{total_value:,.2f} PLN".replace(",", " "), delta="Szacunkowa")
+           
+            st.write("")
+
+            # Zakładki
+            tab1, tab2 = st.tabs(["📋 Tabela Stanów", "📜 Dziennik Operacji"])
+
+            with tab1:
+                st.subheader("Szczegółowy wykaz")
+               
+                st.dataframe(
+                    df[['id', 'nazwa', 'liczba', 'cena']],
+                    use_container_width=True,
+                    hide_index=True,
+                    column_config={
+                        "id": st.column_config.TextColumn("ID", width="small"),
+                        "nazwa": st.column_config.TextColumn("Produkt", width="large"),
+                        "liczba": st.column_config.ProgressColumn(
+                            "Stan magazynowy",
+                            format="%d szt.",
+                            min_value=0,
+                            max_value=max(df['liczba']) * 1.1 if not df.empty else 100,
+                        ),
+                        "cena": st.column_config.NumberColumn(
+                            "Cena jedn.",
+                            format="%.2f zł"
+                        )
+                    }
+                )
+
+                with st.expander("🗑️ Strefa usuwania"):
+                    st.warning("Trwałe usuwanie towaru z ewidencji.")
+                    if 'id' in df.columns:
+                        c_del1, c_del2 = st.columns([3,1])
+                        with c_del1:
+                            opcje = df.apply(lambda x: f"ID {x['id']}: {x['nazwa']}", axis=1)
+                            do_usuniecia = st.selectbox("Wybierz pozycję", opcje, label_visibility="collapsed")
+                        with c_del2:
+                            if st.button("Usuń trwale", type="primary"):
+                                id_usun = int(do_usuniecia.split("ID ")[1].split(":")[0])
+                                nazwa_usun = do_usuniecia.split(":")[1].strip()
+                                supabase.table('produkty').delete().eq('id', id_usun).execute()
+                                dodaj_log(nazwa_usun, "USUNIĘCIE", 0)
+                                st.rerun()
+
+            with tab2:
+                st.subheader("Historia zdarzeń")
+                res = supabase.table('historia').select("*").order("id", desc=True).limit(50).execute()
+                df_hist = pd.DataFrame(res.data)
+               
+                if not df_hist.empty:
+                    st.dataframe(
+                        df_hist,
+                        use_container_width=True,
+                        hide_index=True,
+                        column_config={
+                            "data": st.column_config.DatetimeColumn("Czas", format="DD.MM.YYYY, HH:mm"),
+                            "produkt": st.column_config.TextColumn("Produkt"),
+                            "akcja": st.column_config.TextColumn("Typ ruchu"),
+                            "ilosc": st.column_config.NumberColumn("Ilość")
+                        }
+                    )
+                else:
+                    st.info("Brak wpisów w historii.")
+
+        else:
+            st.info("Magazyn jest pusty. Dodaj pierwszy towar w panelu po lewej.")
+
+    except Exception as e:
+        st.error("Wystąpił problem.")
+        with st.expander("Szczegóły"):
+            st.write(e)
 
 if __name__ == "__main__":
     main()
