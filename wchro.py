@@ -178,7 +178,3 @@ def main():
         st.error("Problem z połączeniem.")
         with st.expander("Szczegóły"):
             st.write(e)
-
-# --- TU BYŁ BŁĄD - TERAZ JEST POPRAWNIE (DWA PODKREŚLNIKI) ---
-if _name_ == "_main_":
-    main()
